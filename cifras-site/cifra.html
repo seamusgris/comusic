@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cifra</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+<div class="barra"><div class="linha">
+  <a class="btn" href="index.html">← Todas as cifras</a>
+  <a class="btn" id="ant" aria-disabled="true">‹ Anterior</a>
+  <a class="btn" id="prox" aria-disabled="true">Próxima ›</a>
+  <span class="esp"></span>
+  <button class="btn" id="menos" aria-label="Diminuir">A−</button>
+  <button class="btn" id="mais" aria-label="Aumentar">A+</button>
+  <button class="btn" id="escuro">Modo escuro</button>
+  <button class="btn" id="rolar">▶ Rolar</button>
+  <input type="range" id="vel" min="1" max="6" value="2" aria-label="Velocidade da rolagem">
+  <a class="btn" id="baixar" download>Baixar PDF</a>
+</div></div>
+<div class="titulo"><h1 id="titulo">Carregando…</h1><div id="tags"></div></div>
+<div id="paginas"><div class="msg">Carregando cifra…</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const arquivo = new URLSearchParams(location.search).get('f');
+const url = arquivo ? encodeURI(arquivo) : null;
+let doc = null, zoom = 1, token = 0;
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+if (!url) { $('titulo').textContent = 'Cifra não encontrada'; $('paginas').innerHTML = '<div class="msg">Volte à lista e escolha uma cifra.</div>'; }
+else {
+  $('baixar').href = url;
+  fetch('cifras.json?_=' + Date.now()).then(r => r.json()).then(lista => {
+    lista.sort((a,b) => a.titulo.localeCompare(b.titulo,'pt',{sensitivity:'base'}));
+    const i = lista.findIndex(c => c.arquivo === arquivo);
+    if (i >= 0) {
+      const c = lista[i];
+      $('titulo').textContent = c.titulo; document.title = c.titulo;
+      c.tags.forEach(t => { const a = document.createElement('a'); a.className='chip link'; a.style.marginRight='6px';
+        a.textContent = t; a.href = 'index.html?tag=' + encodeURIComponent(t); $('tags').appendChild(a); });
+      const liga = (el, outro) => { if (outro) { el.href = 'cifra.html?f=' + encodeURIComponent(outro.arquivo); el.title = outro.titulo; el.removeAttribute('aria-disabled'); } };
+      liga($('ant'), lista[i-1]); liga($('prox'), lista[i+1]);
+    } else $('titulo').textContent = decodeURIComponent(arquivo).split('/').pop().replace(/\.pdf$/i,'');
+  }).catch(()=>{});
+
+  pdfjsLib.getDocument(url).promise.then(d => { doc = d; render(); })
+    .catch(() => $('paginas').innerHTML = `<div class="msg">Não consegui abrir este PDF. <a class="chip link" href="${url}">Abrir direto</a></div>`);
+}
+
+async function render(){
+  const meu = ++token, box = $('paginas'); box.innerHTML = '';
+  const dpr = window.devicePixelRatio || 1;
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    if (meu !== token) return;
+    const base = page.getViewport({scale:1});
+    const w = Math.min(window.innerWidth - 16, 1000) * zoom;
+    const vp = page.getViewport({scale: w / base.width * dpr});
+    const c = document.createElement('canvas');
+    c.width = vp.width; c.height = vp.height; c.style.width = w + 'px';
+    box.appendChild(c);
+    await page.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
+  }
+}
+$('mais').onclick  = () => { zoom = Math.min(zoom + .2, 2.4); doc && render(); };
+$('menos').onclick = () => { zoom = Math.max(zoom - .2, .6);  doc && render(); };
+$('escuro').onclick = e => { $('paginas').classList.toggle('escuro'); e.target.classList.toggle('on'); };
+let timer = null;
+$('rolar').onclick = e => {
+  if (timer) { clearInterval(timer); timer = null; e.target.textContent = '▶ Rolar'; e.target.classList.remove('on'); return; }
+  e.target.textContent = '⏸ Parar'; e.target.classList.add('on');
+  timer = setInterval(() => {
+    const antes = scrollY; scrollBy(0, +$('vel').value);
+    if (scrollY === antes) $('rolar').click();
+  }, 40);
+};
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => doc && render(), 300); });
+</script>
+</body>
+</html>

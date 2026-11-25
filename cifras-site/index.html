@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minhas cifras</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Minhas cifras</h1>
+  <p class="sub" id="contagem">Carregando…</p>
+  <div class="busca">
+    <input type="search" id="q" placeholder="Pesquisar por nome ou tag" aria-label="Pesquisar cifras" autocomplete="off">
+  </div>
+  <div class="tags" id="tags" aria-label="Filtrar por tag"></div>
+  <div class="info" id="info"></div>
+  <div id="lista"></div>
+</div>
+<script>
+const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const $ = id => document.getElementById(id);
+let cifras = [], ativas = new Set();
+
+fetch('cifras.json?_=' + Date.now()).then(r => r.json()).then(d => {
+  cifras = d.sort((a,b) => a.titulo.localeCompare(b.titulo,'pt',{sensitivity:'base'}));
+  const t = new URLSearchParams(location.search).get('tag');
+  if (t) ativas.add(t);
+  desenharTags(); desenhar();
+}).catch(() => $('contagem').textContent = 'Não foi possível carregar a lista de cifras.');
+
+function desenharTags(){
+  const todas = [...new Set(cifras.flatMap(c => c.tags))].sort((a,b)=>a.localeCompare(b,'pt',{sensitivity:'base'}));
+  $('tags').innerHTML = '';
+  todas.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = t;
+    b.setAttribute('aria-pressed', ativas.has(t));
+    b.onclick = () => { ativas.has(t) ? ativas.delete(t) : ativas.add(t); desenharTags(); desenhar(); };
+    $('tags').appendChild(b);
+  });
+}
+
+function desenhar(){
+  const q = norm($('q').value.trim());
+  const res = cifras.filter(c =>
+    [...ativas].every(t => c.tags.includes(t)) &&
+    (!q || norm(c.titulo).includes(q) || c.tags.some(t => norm(t).includes(q))));
+  $('contagem').textContent = cifras.length ? `${cifras.length} cifras` : 'Nenhuma cifra ainda. Coloque PDFs na pasta “cifras”.';
+  $('info').innerHTML = (q || ativas.size)
+    ? `${res.length} resultado(s) <button id="limpar">limpar filtros</button>` : '';
+  if ($('limpar')) $('limpar').onclick = () => { $('q').value=''; ativas.clear(); desenharTags(); desenhar(); };
+
+  const el = $('lista'); el.innerHTML = '';
+  if (!res.length && cifras.length) { el.innerHTML = '<div class="vazio">Nada encontrado.</div>'; return; }
+  let letra = '';
+  res.forEach(c => {
+    const l = norm(c.titulo).charAt(0).toUpperCase();
+    const L = /[A-Z]/.test(l) ? l : '#';
+    if (L !== letra) { letra = L; const h = document.createElement('div'); h.className='letra'; h.textContent=L; el.appendChild(h); }
+    const a = document.createElement('a');
+    a.className = 'item';
+    a.href = 'cifra.html?f=' + encodeURIComponent(c.arquivo);
+    a.innerHTML = '<b></b><small></small>';
+    a.firstChild.textContent = c.titulo;
+    a.lastChild.textContent = c.tags.join(', ');
+    el.appendChild(a);
+  });
+}
+$('q').addEventListener('input', desenhar);
+</script>
+</body>
+</html>

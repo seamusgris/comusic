@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cifras do Louvor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Cifras do Louvor</h1>
+  <p class="sub" id="contagem">Carregando…</p>
+  <div class="busca">
+    <input type="search" id="q" placeholder="Pesquisar por nome ou tag" aria-label="Pesquisar cifras" autocomplete="off">
+  </div>
+  <details class="painel" id="painel" open>
+    <summary>Filtrar por tag <span id="nsel"></span></summary>
+    <div class="modo">
+      <label><input type="radio" name="modo" value="todas" checked> Que tenham todas as marcadas</label>
+      <label><input type="radio" name="modo" value="qualquer"> Que tenham qualquer uma</label>
+    </div>
+    <div class="caixas" id="tags"></div>
+  </details>
+  <div class="info" id="info"></div>
+  <div id="lista"></div>
+</div>
+<script>
+const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const $ = id => document.getElementById(id);
+let cifras = [], ativas = new Set(), modo = 'todas';
+
+fetch('cifras.json?_=' + Date.now()).then(r => r.json()).then(d => {
+  cifras = d.sort((a,b) => a.titulo.localeCompare(b.titulo,'pt',{sensitivity:'base'}));
+  const t = new URLSearchParams(location.search).get('tag');
+  if (t) ativas.add(t);
+  desenharTags(); desenhar();
+}).catch(() => $('contagem').textContent = 'Não foi possível carregar a lista de cifras.');
+
+function desenharTags(){
+  const cont = {};
+  cifras.forEach(c => c.tags.forEach(t => cont[t] = (cont[t]||0) + 1));
+  const todas = Object.keys(cont).sort((a,b)=>a.localeCompare(b,'pt',{sensitivity:'base'}));
+  $('tags').innerHTML = todas.length ? '' : '<span class="info">Nenhuma tag ainda.</span>';
+  todas.forEach(t => {
+    const l = document.createElement('label'); l.className = 'caixa';
+    const i = document.createElement('input'); i.type = 'checkbox'; i.checked = ativas.has(t);
+    i.onchange = () => { i.checked ? ativas.add(t) : ativas.delete(t); desenhar(); };
+    const n = document.createElement('span'); n.textContent = t;
+    const k = document.createElement('small'); k.textContent = cont[t];
+    l.append(i, n, k); $('tags').appendChild(l);
+  });
+}
+
+function desenhar(){
+  const q = norm($('q').value.trim());
+  const res = cifras.filter(c =>
+    (!ativas.size || (modo === 'todas' ? [...ativas].every(t => c.tags.includes(t)) : [...ativas].some(t => c.tags.includes(t)))) &&
+    (!q || norm(c.titulo).includes(q) || c.tags.some(t => norm(t).includes(q))));
+  $('contagem').textContent = cifras.length ? `${cifras.length} cifras` : 'Nenhuma cifra ainda. Coloque PDFs na pasta “cifras”.';
+  $('info').innerHTML = (q || ativas.size)
+    ? `${res.length} resultado(s) <button id="limpar">limpar filtros</button>` : '';
+  if ($('limpar')) $('limpar').onclick = () => { $('q').value=''; ativas.clear(); desenharTags(); desenhar(); };
+
+  $('nsel').textContent = ativas.size ? `(${ativas.size} marcada${ativas.size>1?'s':''})` : '';
+  const el = $('lista'); el.innerHTML = '';
+  if (!res.length && cifras.length) { el.innerHTML = '<div class="vazio">Nada encontrado.</div>'; return; }
+  let letra = '';
+  res.forEach(c => {
+    const l = norm(c.titulo).charAt(0).toUpperCase();
+    const L = /[A-Z]/.test(l) ? l : '#';
+    if (L !== letra) { letra = L; const h = document.createElement('div'); h.className='letra'; h.textContent=L; el.appendChild(h); }
+    const a = document.createElement('a');
+    a.className = 'item';
+    a.href = 'cifra.html?f=' + encodeURIComponent(c.arquivo);
+    a.innerHTML = '<b></b><small></small>';
+    a.firstChild.textContent = c.titulo;
+    a.lastChild.textContent = c.tags.join(', ');
+    el.appendChild(a);
+  });
+}
+$('q').addEventListener('input', desenhar);
+document.querySelectorAll('input[name=modo]').forEach(r => r.onchange = () => { modo = r.value; desenhar(); });
+</script>
+</body>
+</html>
